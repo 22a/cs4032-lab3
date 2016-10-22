@@ -31,20 +31,34 @@ defmodule Skeleton do
   end
 
   defp serve(socket) do
-    socket
-    |> read_line()
-    |> generate_response_or_die()
-    |> write_line(socket)
-
-    serve(socket)
+    {status, data} = classify_line(socket)
+    case status do
+      :terminate ->
+        :gen_tcp.close socket
+        System.halt(0)
+      :closed ->
+        :gen_tcp.close socket
+      _ ->
+        write_line(generate_response_string(data), socket)
+        :gen_tcp.close socket
+    end
   end
 
-  defp generate_response_or_die(data) do
-    case data do
-      "KILL_SERVICE\r\n" ->
-        System.halt(0)
-      _ ->
-        generate_response_string(data)
+  defp classify_line(socket) do
+    {status, data} = :gen_tcp.recv(socket, 0)
+    case status do
+      :ok ->
+        case data do
+          "KILL_SERVICE\n" ->
+            {:terminate, nil}
+          _ ->
+            {:ok, data}
+        end
+      :error ->
+        case data do
+          :closed ->
+            {:closed, nil}
+        end
     end
   end
 
@@ -58,11 +72,6 @@ defmodule Skeleton do
     |> hd()
     |> Tuple.to_list
     |> Enum.join(".")
-  end
-
-  defp read_line(socket) do
-    {:ok, data} = :gen_tcp.recv(socket, 0)
-    data
   end
 
   defp write_line(line, socket) do
