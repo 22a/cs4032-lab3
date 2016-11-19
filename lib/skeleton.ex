@@ -38,56 +38,67 @@ defmodule Skeleton do
         case data do
           "HELO" <> _ ->
             write_line(generate_HELO_response_string(data), socket)
+
           "KILL_SERVICE" <> _ ->
             System.halt(0)
+
           "JOIN_CHATROOM" <> _ ->
-            # TODO: parse out:
-            # JOIN_CHATROOM: [chatroom name]
-            # CLIENT_IP: [IP Address of client if UDP | 0 if TCP]
-            # PORT: [port number of client if UDP | 0 if TCP]
-            # CLIENT_NAME: [string Handle to identifier client user]
+            {room_name,_,_,client_name,_,_} = parse_input(data)
 
-            room_ref = "hello"
-            {:ok, _} = Registry.register(Skeleton.Registry, room_ref, [])
+            # ripe for collisions
+            room_ref = impending_collision(room_name)
+            join_id = impending_collision(client_name)
 
-            # TODO: respond with:
-            # JOINED_CHATROOM: [chatroom name]
-            # SERVER_IP: [IP address of chat room]
-            # PORT: [port number of chat room]
-            # ROOM_REF: [integer that uniquely identifies chat room on server]
-            # JOIN_ID: [integer that uniquely identifies client joining]
+            {:ok, _} = Registry.register(Skeleton.Registry, Integer.to_string(room_ref), {client_name,socket})
+
+            resp = """
+            JOINED_CHATROOM: #{room_name}
+            SERVER_IP: #{get_ip_string()}
+            PORT: #{@port}
+            ROOM_REF:#{room_ref}
+            JOIN_ID: #{join_id}
+
+            """
+            write_line(resp, socket)
+
           "LEAVE_CHATROOM" <> _ ->
-            # TODO: parse out:
-            # LEAVE_CHATROOM: [ROOM_REF]
-            # JOIN_ID: [integer previously provided by server on join]
-            # CLIENT_NAME: [string Handle to identifier client user]
-            room_ref = "hello"
+            {room_ref,join_id,client_name} = parse_input(data)
+
+            # TODO: this doesn't do what I thought it did, this would delete
+            #       the whole chatroom when the first person left
+            #       investigate lookup\2 + update_value\3
             :ok = Registry.unregister(Skeleton.Registry, room_ref)
+
+            resp = """
+            LEFT_CHATROOM: #{room_ref}
+            JOIN_ID: #{join_id}
+
+            """
+            write_line(resp, socket)
             # TODO: send this message even if the user wasn't in the room
-            # TODO: respond with:
-            # LEFT_CHATROOM: [ROOM_REF]
-            # JOIN_ID: [integer previously provided by server on join]
+
           "DISCONNECT" <> _ ->
-            # DISCONNECT: [IP address of client if UDP | 0 if TCP]
-            # PORT: [port number of client it UDP | 0 id TCP]
-            # CLIENT_NAME: [string handle to identify client user]
+            {_,_,client_name} = parse_input(data)
+            # TODO: this is also broken, fix above, use here
             Registry.keys(Skeleton.Registry, self())
             |> Enum.map(fn(room_ref) -> Registry.unregister(Skeleton.Registry, room_ref) end )
+
             :gen_tcp.close socket
-            :nop
+
           "CHAT" <> _ ->
-            # CHAT: [ROOM_REF]
-            # JOIN_ID: [integer identifying client to server]
-            # CLIENT_NAME: [string identifying client user]
-            # MESSAGE: [string terminated with '\n\n']
-            room_ref = "hello"
+            {room_ref, join_id, client_name, message} = parse_input(data)
+
+            broadcast = """
+            CHAT: #{room_ref}
+            CLIENT_NAME: #{client_name}
+            MESSAGE: #{message}
+
+            """
+
             Registry.dispatch(Skeleton.Registry, room_ref, fn entries ->
-              for {pid, _} <- entries, do: send(pid, {:chat, "room+sender+message"})
+              for {_, {sub_name, sub_socket}} <- entries, do: write_line(broadcast, sub_socket)
             end)
-            # TODO: in format:
-            # CHAT: [ROOM_REF]
-            # CLIENT_NAME: [string identifying client user]
-            # MESSAGE: [string terminated with '\n\n']
+
           _ ->
             Logger.error "unexpected message type"
         end
@@ -97,6 +108,18 @@ defmodule Skeleton do
             :ok
         end
     end
+  end
+
+  defp impending_collision(str) do
+    str
+    |> to_charlist
+    |> Enum.sum
+  end
+
+  defp parse_input(str) do
+    str
+    |> String.split("\n")
+    |> Enum.map(fn(line) -> String.split(line, ":") |> tl |> Enum.join("") end)
   end
 
   defp generate_HELO_response_string(data) do
