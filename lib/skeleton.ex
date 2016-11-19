@@ -64,9 +64,6 @@ defmodule Skeleton do
           "LEAVE_CHATROOM" <> _ ->
             {room_ref,join_id,client_name} = parse_input(data)
 
-            # TODO: this doesn't do what I thought it did, this would delete
-            #       the whole chatroom when the first person left
-            #       investigate lookup\2 + update_value\3
             :ok = Registry.unregister(Skeleton.Registry, room_ref)
 
             resp = """
@@ -79,7 +76,6 @@ defmodule Skeleton do
 
           "DISCONNECT" <> _ ->
             {_,_,client_name} = parse_input(data)
-            # TODO: this is also broken, fix above, use here
             Registry.keys(Skeleton.Registry, self())
             |> Enum.map(fn(room_ref) -> Registry.unregister(Skeleton.Registry, room_ref) end )
 
@@ -96,11 +92,12 @@ defmodule Skeleton do
             """
 
             Registry.dispatch(Skeleton.Registry, room_ref, fn entries ->
-              for {_, {sub_name, sub_socket}} <- entries, do: write_line(broadcast, sub_socket)
+              for {_, {_, sub_socket}} <- entries, do: write_line(broadcast, sub_socket)
             end)
 
           _ ->
-            Logger.error "unexpected message type"
+            Logger.debug "unexpected message type"
+            Logger.debug data
         end
       :error ->
         case data do
@@ -108,6 +105,7 @@ defmodule Skeleton do
             :ok
         end
     end
+    serve(socket)
   end
 
   defp impending_collision(str) do
@@ -117,6 +115,7 @@ defmodule Skeleton do
   end
 
   defp parse_input(str) do
+    Logger.info str
     str
     |> String.split("\n")
     |> Enum.map(fn(line) -> String.split(line, ":") |> tl |> Enum.join("") end)
