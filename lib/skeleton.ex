@@ -19,7 +19,7 @@ defmodule Skeleton do
 
   def accept(port) do
     {:ok, socket} = :gen_tcp.listen(port,
-    [:binary, packet: :line, active: false, reuseaddr: true])
+    [:binary, packet: :raw, active: false, reuseaddr: true])
     Logger.info "Accepting connections on port #{port}"
     loop_acceptor(socket)
   end
@@ -43,7 +43,7 @@ defmodule Skeleton do
             System.halt(0)
 
           "JOIN_CHATROOM" <> _ ->
-            {room_name,_,_,client_name,_,_} = parse_input(data)
+            {room_name,_,_,client_name,_} = parse_input(data)
 
             # ripe for collisions
             room_ref = impending_collision(room_name)
@@ -62,7 +62,7 @@ defmodule Skeleton do
             write_line(resp, socket)
 
           "LEAVE_CHATROOM" <> _ ->
-            {room_ref,join_id,client_name} = parse_input(data)
+            {room_ref,join_id,client_name,_} = parse_input(data)
 
             :ok = Registry.unregister(Skeleton.Registry, room_ref)
 
@@ -75,14 +75,14 @@ defmodule Skeleton do
             # TODO: send this message even if the user wasn't in the room
 
           "DISCONNECT" <> _ ->
-            {_,_,client_name} = parse_input(data)
+            {_,_,client_name,_} = parse_input(data)
             Registry.keys(Skeleton.Registry, self())
             |> Enum.map(fn(room_ref) -> Registry.unregister(Skeleton.Registry, room_ref) end )
 
             :gen_tcp.close socket
 
           "CHAT" <> _ ->
-            {room_ref, join_id, client_name, message} = parse_input(data)
+            {room_ref, join_id, client_name, message,_,_} = parse_input(data)
 
             broadcast = """
             CHAT: #{room_ref}
@@ -119,6 +119,7 @@ defmodule Skeleton do
     str
     |> String.split("\n")
     |> Enum.map(fn(line) -> String.split(line, ":") |> tl |> Enum.join("") end)
+    |> List.to_tuple
   end
 
   defp generate_HELO_response_string(data) do
