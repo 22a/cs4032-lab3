@@ -2,14 +2,15 @@ defmodule Skeleton do
   use Application
   require Logger
 
-  @port Application.get_env(:skeleton, :port)
+  @port 5000
 
   def start(_type, _args) do
     import Supervisor.Spec
 
     children = [
       supervisor(Task.Supervisor, [[name: Skeleton.TaskSupervisor]]),
-      worker(Task, [Skeleton, :accept, [@port]])
+      worker(Task, [Skeleton, :accept, [@port]]),
+      supervisor(Registry, [:duplicate, Skeleton.Registry, [partitions: System.schedulers_online()]])
     ]
 
     opts = [strategy: :one_for_one, name: Skeleton.Supervisor]
@@ -31,38 +32,74 @@ defmodule Skeleton do
   end
 
   defp serve(socket) do
-    {status, data} = classify_line(socket)
-    case status do
-      :terminate ->
-        :gen_tcp.close socket
-        System.halt(0)
-      :closed ->
-        :gen_tcp.close socket
-      _ ->
-        write_line(generate_response_string(data), socket)
-        :gen_tcp.close socket
-    end
-  end
-
-  defp classify_line(socket) do
     {status, data} = :gen_tcp.recv(socket, 0)
     case status do
       :ok ->
         case data do
-          "KILL_SERVICE\n" ->
-            {:terminate, nil}
+          "HELO" <> _ ->
+            write_line(generate_HELO_response_string(data), socket)
+          "KILL_SERVICE" <> _ ->
+            System.halt(0)
+          "JOIN_CHATROOM" <> _ ->
+            # TODO: parse out:
+            # JOIN_CHATROOM: [chatroom name]
+            # CLIENT_IP: [IP Address of client if UDP | 0 if TCP]
+            # PORT: [port number of client if UDP | 0 if TCP]
+            # CLIENT_NAME: [string Handle to identifier client user]
+
+            room_ref = "hello"
+            {:ok, _} = Registry.register(Skeleton.Registry, room_ref, [])
+
+            # TODO: respond with:
+            # JOINED_CHATROOM: [chatroom name]
+            # SERVER_IP: [IP address of chat room]
+            # PORT: [port number of chat room]
+            # ROOM_REF: [integer that uniquely identifies chat room on server]
+            # JOIN_ID: [integer that uniquely identifies client joining]
+          "LEAVE_CHATROOM" <> _ ->
+            # TODO: parse out:
+            # LEAVE_CHATROOM: [ROOM_REF]
+            # JOIN_ID: [integer previously provided by server on join]
+            # CLIENT_NAME: [string Handle to identifier client user]
+            room_ref = "hello"
+            :ok = Registry.unregister(Skeleton.Registry, room_ref)
+            # TODO: send this message even if the user wasn't in the room
+            # TODO: respond with:
+            # LEFT_CHATROOM: [ROOM_REF]
+            # JOIN_ID: [integer previously provided by server on join]
+          "DISCONNECT" <> _ ->
+            # DISCONNECT: [IP address of client if UDP | 0 if TCP]
+            # PORT: [port number of client it UDP | 0 id TCP]
+            # CLIENT_NAME: [string handle to identify client user]
+            Registry.keys(Skeleton.Registry, self())
+            |> Enum.map(fn(room_ref) -> Registry.unregister(Skeleton.Registry, room_ref) end )
+            :gen_tcp.close socket
+            :nop
+          "CHAT" <> _ ->
+            # CHAT: [ROOM_REF]
+            # JOIN_ID: [integer identifying client to server]
+            # CLIENT_NAME: [string identifying client user]
+            # MESSAGE: [string terminated with '\n\n']
+            room_ref = "hello"
+            Registry.dispatch(Skeleton.Registry, room_ref, fn entries ->
+              for {pid, _} <- entries, do: send(pid, {:chat, "room+sender+message"})
+            end)
+            # TODO: in format:
+            # CHAT: [ROOM_REF]
+            # CLIENT_NAME: [string identifying client user]
+            # MESSAGE: [string terminated with '\n\n']
           _ ->
-            {:ok, data}
+            Logger.error "unexpected message type"
         end
       :error ->
         case data do
           :closed ->
-            {:closed, nil}
+            :ok
         end
     end
   end
 
-  defp generate_response_string(data) do
+  defp generate_HELO_response_string(data) do
     ~s(#{data}IP:#{get_ip_string()}\nPort:#{@port}\nStudentID:13318021\n)
   end
 

@@ -12,7 +12,7 @@ use Mix.Config
 #
 #     config :skeleton, key: :value
 #
-config :skeleton, port: String.to_integer(System.get_env("CS4032_LAB2_PORT")) || 4040
+# config :skeleton, port: String.to_integer(System.get_env("CS4032_LAB3_PORT")) || 4040
 #
 # And access this configuration in your application as:
 #
