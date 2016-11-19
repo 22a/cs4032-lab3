@@ -61,6 +61,14 @@ defmodule Skeleton do
             """
             write_line(resp, socket)
 
+            join_msg = """
+            CHAT: #{room_ref}
+            CLIENT_NAME: #{client_name}
+            MESSAGE: #{client_name} has joined the room yo
+
+            """
+            broadcast_to_room(room_ref, join_msg)
+
           "LEAVE_CHATROOM" <> _ ->
             {room_ref,join_id,client_name,_} = parse_input(data)
 
@@ -84,28 +92,36 @@ defmodule Skeleton do
           "CHAT" <> _ ->
             {room_ref, join_id, client_name, message,_,_} = parse_input(data)
 
-            broadcast = """
+            msg = """
             CHAT: #{room_ref}
             CLIENT_NAME: #{client_name}
             MESSAGE: #{message}
 
             """
 
-            Registry.dispatch(Skeleton.Registry, room_ref, fn entries ->
-              for {_, {_, sub_socket}} <- entries, do: write_line(broadcast, sub_socket)
-            end)
+            broadcast_to_room(room_ref, msg)
+
 
           _ ->
-            Logger.debug "unexpected message type"
-            Logger.debug data
+            Logger.info "unexpected message type"
+            Logger.info data
         end
       :error ->
         case data do
           :closed ->
             :ok
+          _ ->
+            Logger.error "Unexpected error with tcp recv"
+            Logger.error data
         end
     end
     serve(socket)
+  end
+
+  defp broadcast_to_room(room_ref, message) do
+    Registry.dispatch(Skeleton.Registry, room_ref, fn entries ->
+      for {_, {_, sub_socket}} <- entries, do: write_line(message, sub_socket)
+    end)
   end
 
   defp impending_collision(str) do
@@ -135,6 +151,8 @@ defmodule Skeleton do
   end
 
   defp write_line(line, socket) do
+    Logger.debug "Response:"
+    Logger.debug line
     :gen_tcp.send(socket, line)
   end
 end
