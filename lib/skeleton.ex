@@ -80,18 +80,13 @@ defmodule Skeleton do
             """
             write_line(resp, socket)
 
-            leave_msg = """
-            CHAT: #{room_ref}
-            CLIENT_NAME: #{client_name}
-            MESSAGE: #{client_name} has left this chatroom.
-
-            """
-            broadcast_to_room(room_ref, leave_msg)
+            conduct_leave(room_ref, client_name, socket)
 
           "DISCONNECT" <> _ ->
             {_,_,client_name,_} = parse_input(data)
             Registry.keys(Skeleton.Registry, self())
-            |> Enum.map(fn(room_ref) -> Registry.unregister(Skeleton.Registry, room_ref) end )
+            |> Enum.map(fn(room_ref) -> Registry.unregister(Skeleton.Registry, room_ref)
+                                        conduct_leave(room_ref,client_name,socket) end )
 
             :gen_tcp.close socket
 
@@ -123,6 +118,17 @@ defmodule Skeleton do
     serve(socket)
   end
 
+  defp conduct_leave(room_ref, client_name, socket) do
+    leave_msg = """
+    CHAT: #{room_ref}
+    CLIENT_NAME: #{client_name}
+    MESSAGE: #{client_name} has left this chatroom.
+
+    """
+    broadcast_to_room(room_ref, leave_msg)
+    write_line(leave_msg, socket)
+  end
+
   defp broadcast_to_room(room_ref, message) do
     Registry.dispatch(Skeleton.Registry, room_ref, fn entries ->
       for {_, {_, sub_socket}} <- entries, do: write_line(message, sub_socket)
@@ -139,7 +145,7 @@ defmodule Skeleton do
     Logger.info str
     str
     |> String.split("\n")
-    |> Enum.map(fn(line) -> String.split(line, ":") |> tl |> Enum.join("") end)
+    |> Enum.map(fn(line) -> String.split(line, ":") |> tl |> Enum.join("") |> String.lstrip end)
     |> List.to_tuple
   end
 
