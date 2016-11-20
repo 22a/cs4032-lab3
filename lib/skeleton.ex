@@ -2,7 +2,7 @@ defmodule Skeleton do
   use Application
   require Logger
 
-  @port 5000
+  @port Application.get_env(:skeleton, :port)
 
   def start(_type, _args) do
     import Supervisor.Spec
@@ -91,7 +91,7 @@ defmodule Skeleton do
             :gen_tcp.close socket
 
           "CHAT" <> _ ->
-            {room_ref, join_id, client_name, message,_,_} = parse_input(data)
+            {room_ref, _join_id, client_name, message,_,_} = parse_input(data)
 
             msg = """
             CHAT: #{room_ref}
@@ -142,7 +142,6 @@ defmodule Skeleton do
   end
 
   defp parse_input(str) do
-    Logger.info str
     str
     |> String.split("\n")
     |> Enum.map(fn(line) -> String.split(line, ":") |> tl |> Enum.join("") |> String.lstrip end)
@@ -162,8 +161,6 @@ defmodule Skeleton do
   end
 
   defp write_line(line, socket) do
-    Logger.debug "Response:"
-    IO.inspect line
     :gen_tcp.send(socket, line)
   end
 end

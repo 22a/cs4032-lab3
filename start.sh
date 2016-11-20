@@ -11,7 +11,7 @@ function do_it {
       echo "${port} is not a valid port" 1>&2
       return
     fi
-    export CS4032_LAB2_PORT=$1
+    export CS4032_LAB3_PORT=$1
     mix run --no-halt
   else
     echo "You don't have the right bits and pieces installed. Read the readme."
