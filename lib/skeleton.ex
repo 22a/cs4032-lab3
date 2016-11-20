@@ -64,7 +64,7 @@ defmodule Skeleton do
             join_msg = """
             CHAT: #{room_ref}
             CLIENT_NAME: #{client_name}
-            MESSAGE: #{client_name} has joined the room yo
+            MESSAGE: #{client_name} has joined this chatroom.
 
             """
             broadcast_to_room(room_ref, join_msg)
@@ -79,7 +79,14 @@ defmodule Skeleton do
             JOIN_ID: #{join_id}
             """
             write_line(resp, socket)
-            # TODO: send this message even if the user wasn't in the room
+
+            leave_msg = """
+            CHAT: #{room_ref}
+            CLIENT_NAME: #{client_name}
+            MESSAGE: #{client_name} has left this chatroom.
+
+            """
+            broadcast_to_room(room_ref, leave_msg)
 
           "DISCONNECT" <> _ ->
             {_,_,client_name,_} = parse_input(data)
