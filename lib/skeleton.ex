@@ -47,9 +47,10 @@ defmodule Skeleton do
 
             # ripe for collisions
             room_ref = impending_collision(room_name)
+                        |> Integer.to_string
             join_id = impending_collision(client_name)
 
-            {:ok, _} = Registry.register(Skeleton.Registry, Integer.to_string(room_ref), {client_name,socket})
+            {:ok, _} = Registry.register(Skeleton.Registry, room_ref, {client_name,socket})
 
             resp = """
             JOINED_CHATROOM: #{room_name}
@@ -57,7 +58,6 @@ defmodule Skeleton do
             PORT: #{@port}
             ROOM_REF:#{room_ref}
             JOIN_ID: #{join_id}
-
             """
             write_line(resp, socket)
 
@@ -77,7 +77,6 @@ defmodule Skeleton do
             resp = """
             LEFT_CHATROOM: #{room_ref}
             JOIN_ID: #{join_id}
-
             """
             write_line(resp, socket)
             # TODO: send this message even if the user wasn't in the room
@@ -100,7 +99,6 @@ defmodule Skeleton do
             """
 
             broadcast_to_room(room_ref, msg)
-
 
           _ ->
             Logger.info "unexpected message type"
@@ -152,7 +150,7 @@ defmodule Skeleton do
 
   defp write_line(line, socket) do
     Logger.debug "Response:"
-    Logger.debug line
+    IO.inspect line
     :gen_tcp.send(socket, line)
   end
 end
